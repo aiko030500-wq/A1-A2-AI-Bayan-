@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 
-    <!-- Babel для поддержки JSX в браузере -->
+    <!-- Babel для JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   </head>
   <body class="bg-pink-50">
@@ -21,103 +21,69 @@
     <script type="text/babel">
       const { useState, useEffect } = React;
 
-      // A1 AI Bayan — курс A1–A2 с 24 темами
-      // Фишки:
-      // - 2 PIN-кода: ученик (2844) и учитель (3244)
-      // - 30 слотов учеников: L1..L30
-      // - Звёзды за правильные ответы (1 попытка)
-      // - Журнал учителя с прогрессом
-      // - Чат с ИИ Bayan (1 вопрос по теме на урок)
-      // - Говорение: задания по теме, про себя и окружение
-      // - Розовая тема + свой цвет у каждой темы
-
       function App() {
-        const [step, setStep] = useState("pin"); // "pin" | "student" | "teacher" | "lessons"
+        // step: name -> pin -> student | teacher | lessons
+        const [step, setStep] = useState("name"); // "name" | "pin" | "student" | "teacher" | "lessons"
+        const [studentName, setStudentName] = useState(""); // что вводит ученик (L1/L2/имя)
         const [pinInput, setPinInput] = useState("");
         const [pinError, setPinError] = useState("");
 
-        const [selectedStudent, setSelectedStudent] = useState(null); // "L1"..."L30"
+        const [activeStudentId, setActiveStudentId] = useState(null); // строка имени ученика
         const [section, setSection] = useState("home"); // "home" | lessonId
 
-        // stars[studentId] = { 1: true, 2: true, q1: true ... }
-        const [stars, setStars] = useState({});
+        // progress[studentName] = { [lessonId]: { tried: true, correct: bool, askedAI: bool } }
+        const [progress, setProgress] = useState({});
 
-        // тест по грамматике
+        // состояния для теста
         const [quizAnswer, setQuizAnswer] = useState("");
         const [quizResult, setQuizResult] = useState(null); // true | false | null
 
-        // вопрос к ИИ по теме
+        // состояния для чата с ИИ
         const [aiQuestion, setAiQuestion] = useState("");
         const [aiStatus, setAiStatus] = useState(null); // null | "sent"
 
         const STUDENT_PIN = "2844";
         const TEACHER_PIN = "3244";
 
-        // 24 урока, первые 6 с тестовым вопросом
+        // 30 грамматических тем (A1–A2)
         const lessons = [
-          {
-            id: 1,
-            title: "Day 1 — To be (am/is/are)",
-            content:
-              "I am / You are / He is...\n\nЦель: научиться говорить, кто ты, кто он/она и т.д.",
-            question: "He ___ a student",
-            correct: "is",
-          },
-          {
-            id: 2,
-            title: "Day 2 — This / That / These / Those",
-            content:
-              "This is / That is / These are / Those are\n\nЦель: указывать на предметы рядом и далеко.",
-            question: "___ is my book (рядом)",
-            correct: "This",
-          },
-          {
-            id: 3,
-            title: "Day 3 — Present Simple",
-            content:
-              "I live / She likes / We study...\n\nЦель: говорить о фактах и привычках.",
-            question: "She ___ coffee",
-            correct: "likes",
-          },
-          {
-            id: 4,
-            title: "Day 4 — Do/Does",
-            content:
-              "Do you...? Does he...? Does she...?\n\nЦель: задавать вопросы в Present Simple.",
-            question: "___ you like English?",
-            correct: "Do",
-          },
-          {
-            id: 5,
-            title: "Day 5 — Have / Have got",
-            content:
-              "I have... / I have got...\n\nЦель: говорить о том, что у тебя есть.",
-            question: "I ___ a book",
-            correct: "have",
-          },
-          {
-            id: 6,
-            title: "Day 6 — There is / There are",
-            content:
-              "There is a... / There are...\n\nЦель: описывать пространство (комнаты, классы, города).",
-            question: "There ___ a cat",
-            correct: "is",
-          },
-          // Остальные темы можно будет заполнить позже
-          ...Array.from({ length: 18 }, (_, i) => ({
-            id: i + 7,
-            title: `Day ${i + 7}`,
-            content: `Содержимое урока ${i + 7} (можно дополнить позже).`,
-            question: null,
-            correct: null,
-          })),
-        ];
+          { id: 1, title: "Day 1 — To be (am/is/are)", content: "I am / You are / He is...\\n\\nЦель: говорить, кто ты, кто он/она.", question: "He ___ a student", correct: "is" },
+          { id: 2, title: "Day 2 — This / That / These / Those", content: "This is / That is / These are / Those are\\n\\nЦель: говорить о предметах вокруг.", question: "___ is my book (рядом)", correct: "This" },
+          { id: 3, title: "Day 3 — Present Simple (утверждения)", content: "I live / She likes / We study...\\n\\nЦель: факты и привычки.", question: "She ___ coffee", correct: "likes" },
+          { id: 4, title: "Day 4 — Do/Does (вопросы/отрицания)", content: "Do you...? Does he...?\\n\\nЦель: задавать вопросы.", question: "___ you like English?", correct: "Do" },
+          { id: 5, title: "Day 5 — Have / Have got", content: "I have... / I have got...\\n\\nЦель: говорить о том, что есть.", question: "I ___ a book", correct: "have" },
+          { id: 6, title: "Day 6 — There is / There are", content: "There is a... / There are...\\n\\nЦель: описывать комнату, дом, класс.", question: "There ___ a cat", correct: "is" },
 
-        const students = Array.from({ length: 30 }, (_, i) => `L${i + 1}`);
+          // Остальные темы — без теста (можно дополнить позже)
+          { id: 7,  title: "Day 7 — Articles (a/an/the)",                 content: "Артикли a/an/the.\\n\\nЦель: говорить о предметах." },
+          { id: 8,  title: "Day 8 — Plural nouns",                         content: "Множественное число: books, buses, children." },
+          { id: 9,  title: "Day 9 — Possessive adjectives",                content: "my, your, his, her, our, their." },
+          { id: 10, title: "Day 10 — Can / Can’t",                         content: "I can..., I can’t...\\n\\nЦель: говорить о своих умениях." },
+          { id: 11, title: "Day 11 — Prepositions of place",               content: "in / on / under / next to...\\n\\nЦель: описывать расположение." },
+          { id: 12, title: "Day 12 — Prepositions of time",                content: "at / in / on (время, дни, месяцы)." },
+          { id: 13, title: "Day 13 — Present Continuous",                  content: "I am doing...\\n\\nЦель: говорить о действии сейчас." },
+          { id: 14, title: "Day 14 — Imperatives",                         content: "Sit down. Open your book. Don’t run." },
+          { id: 15, title: "Day 15 — Countable / Uncountable",             content: "apple / water; a/an, some, much/many." },
+          { id: 16, title: "Day 16 — Some / any / much / many",            content: "Some apples, many books, much water." },
+          { id: 17, title: "Day 17 — Like / love / hate + -ing",           content: "I like reading, I love swimming." },
+          { id: 18, title: "Day 18 — Adverbs of frequency",                content: "always, usually, sometimes, never." },
+          { id: 19, title: "Day 19 — Comparatives",                        content: "bigger, smaller, more interesting." },
+          { id: 20, title: "Day 20 — Superlatives",                        content: "the biggest, the best, the most beautiful." },
+          { id: 21, title: "Day 21 — Past Simple (правильные)",            content: "worked, played, watched." },
+          { id: 22, title: "Day 22 — Past Simple (неправильные)",          content: "went, saw, had, ate." },
+          { id: 23, title: "Day 23 — Past Continuous",                     content: "I was studying, they were playing." },
+          { id: 24, title: "Day 24 — Present Perfect (базовый)",           content: "I have been, I have seen." },
+          { id: 25, title: "Day 25 — Going to (планы)",                    content: "I am going to study, we are going to travel." },
+          { id: 26, title: "Day 26 — Will (решения / прогнозы)",           content: "I will help you, it will rain." },
+          { id: 27, title: "Day 27 — Should / shouldn’t",                  content: "You should study, you shouldn’t smoke." },
+          { id: 28, title: "Day 28 — First Conditional",                   content: "If it rains, I will stay home." },
+          { id: 29, title: "Day 29 — Too / enough",                        content: "too big, not big enough." },
+          { id: 30, title: "Day 30 — Wh-questions",                        content: "what, where, when, why, how." },
+        ];
 
         const questionLessonsCount = lessons.filter((l) => l.question).length;
 
-        // Цвета карточек тем — по кругу
+        // цвета для карточек
         const colorSets = [
           { card: "from-pink-100 to-pink-200" },
           { card: "from-rose-100 to-rose-200" },
@@ -126,129 +92,160 @@
           { card: "from-emerald-100 to-emerald-200" },
           { card: "from-amber-100 to-amber-200" },
         ];
-
         const getLessonColors = (id) => {
           const idx = (id - 1) % colorSets.length;
           return colorSets[idx];
         };
 
-        // загрузка прогресса из localStorage
+        // загрузка прогресса
         useEffect(() => {
-          const saved = localStorage.getItem("a1_ai_bayan_stars");
+          const saved = localStorage.getItem("a1_ai_bayan_progress");
           if (saved) {
             try {
-              setStars(JSON.parse(saved));
+              setProgress(JSON.parse(saved));
             } catch {
-              setStars({});
+              setProgress({});
             }
           }
         }, []);
 
         // сохранение прогресса
         useEffect(() => {
-          localStorage.setItem("a1_ai_bayan_stars", JSON.stringify(stars));
-        }, [stars]);
-
-        const handleCheckPin = () => {
-          if (pinInput === STUDENT_PIN) {
-            setStep("student");
-            setPinError("");
-            setSelectedStudent(null);
-            setSection("home");
-          } else if (pinInput === TEACHER_PIN) {
-            setStep("teacher");
-            setPinError("");
-            setSelectedStudent(null);
-            setSection("home");
-          } else {
-            setPinError("Неверный PIN");
-          }
-        };
-
-        const handleSelectStudent = (s) => {
-          setSelectedStudent(s);
-          setStep("lessons");
-          setSection("home");
-          setQuizAnswer("");
-          setQuizResult(null);
-          setAiQuestion("");
-          setAiStatus(null);
-        };
-
-        const resetToPin = () => {
-          setStep("pin");
-          setPinInput("");
-          setPinError("");
-          setSelectedStudent(null);
-          setSection("home");
-          setQuizAnswer("");
-          setQuizResult(null);
-          setAiQuestion("");
-          setAiStatus(null);
-        };
+          localStorage.setItem("a1_ai_bayan_progress", JSON.stringify(progress));
+        }, [progress]);
 
         const currentLesson =
           typeof section === "number"
             ? lessons.find((l) => l.id === section)
             : null;
 
-        const studentHasStar = (studentId, lessonId) => {
-          if (!studentId) return false;
-          return !!(stars?.[studentId]?.[lessonId]);
+        // получение данных по текущему ученику и уроку
+        const getLessonStatus = (name, lessonId) => {
+          if (!name || !progress[name]) return { tried: false, correct: false, askedAI: false };
+          const data = progress[name][lessonId] || {};
+          return {
+            tried: !!data.tried,
+            correct: !!data.correct,
+            askedAI: !!data.askedAI,
+          };
         };
 
-        const studentAskedAI = (studentId, lessonId) => {
-          if (!studentId) return false;
-          return !!(stars?.[studentId]?.[`q${lessonId}`]);
+        const studentTried = (name, lessonId) =>
+          getLessonStatus(name, lessonId).tried;
+
+        const studentCorrect = (name, lessonId) =>
+          getLessonStatus(name, lessonId).correct;
+
+        const studentAskedAI = (name, lessonId) =>
+          getLessonStatus(name, lessonId).askedAI;
+
+        const getStudentStarCount = (name) => {
+          if (!name || !progress[name]) return 0;
+          return Object.values(progress[name]).filter((x) => x.correct).length;
         };
 
-        const getStudentStarCount = (studentId) => {
-          const data = stars?.[studentId] || {};
-          return Object.keys(data).length;
+        // шаг 1: ввод имени
+        const handleNameContinue = () => {
+          const trimmed = studentName.trim();
+          if (!trimmed) return;
+          setStudentName(trimmed);
+          setActiveStudentId(trimmed); // имя ученика = его ID
+          setStep("pin");
+          setPinInput("");
+          setPinError("");
         };
 
-        const checkAnswer = () => {
-          if (!currentLesson || !currentLesson.correct || !selectedStudent) return;
+        // шаг 2: ввод PIN
+        const handleCheckPin = () => {
+          if (pinInput === STUDENT_PIN) {
+            // вход ученика
+            setStep("lessons");
+            setSection("home");
+            setPinError("");
+          } else if (pinInput === TEACHER_PIN) {
+            // вход учителя
+            setStep("teacher");
+            setSection("home");
+            setPinError("");
+          } else {
+            setPinError("Неверный PIN");
+          }
+        };
 
-          // уже есть звезда — не даём ещё раз
-          if (studentHasStar(selectedStudent, currentLesson.id)) {
-            setQuizResult(true);
+        const resetAll = () => {
+          setStep("name");
+          setStudentName("");
+          setActiveStudentId(null);
+          setSection("home");
+          setPinInput("");
+          setPinError("");
+          setQuizAnswer("");
+          setQuizResult(null);
+          setAiQuestion("");
+          setAiStatus(null);
+        };
+
+        const openLesson = (lessonId) => {
+          setSection(lessonId);
+          setQuizAnswer("");
+          setQuizResult(null);
+          setAiQuestion("");
+          setAiStatus(null);
+        };
+
+        // проверка ответа (ученик 1 раз отвечает)
+        const handleCheckAnswer = () => {
+          if (!currentLesson || !currentLesson.correct || !activeStudentId) return;
+
+          const status = getLessonStatus(activeStudentId, currentLesson.id);
+          if (status.tried) {
+            // уже отвечал — не даём второй раз
             return;
           }
 
-          if (
+          const isCorrect =
             quizAnswer.trim().toLowerCase() ===
-            currentLesson.correct.toLowerCase()
-          ) {
-            setQuizResult(true);
-            setStars((prev) => ({
-              ...prev,
-              [selectedStudent]: {
-                ...(prev[selectedStudent] || {}),
-                [currentLesson.id]: true,
+            currentLesson.correct.toLowerCase();
+
+          setProgress((prev) => ({
+            ...prev,
+            [activeStudentId]: {
+              ...(prev[activeStudentId] || {}),
+              [currentLesson.id]: {
+                tried: true,
+                correct: isCorrect,
+                askedAI: status.askedAI || false,
               },
-            }));
-          } else {
-            setQuizResult(false);
-          }
+            },
+          }));
+
+          setQuizResult(isCorrect);
         };
 
+        // чат с ИИ (1 вопрос по теме)
         const handleAskAI = () => {
-          if (!selectedStudent || !currentLesson) return;
+          if (!activeStudentId || !currentLesson) return;
           if (!aiQuestion.trim()) return;
 
-          // Если уже задавал вопрос по этому уроку — нельзя ещё
-          if (studentAskedAI(selectedStudent, currentLesson.id)) return;
+          const status = getLessonStatus(activeStudentId, currentLesson.id);
+          if (status.askedAI) return; // уже задавал вопрос
 
-          setStars((prev) => ({
+          setProgress((prev) => ({
             ...prev,
-            [selectedStudent]: {
-              ...(prev[selectedStudent] || {}),
-              [`q${currentLesson.id}`]: true,
+            [activeStudentId]: {
+              ...(prev[activeStudentId] || {}),
+              [currentLesson.id]: {
+                tried: status.tried || false,
+                correct: status.correct || false,
+                askedAI: true,
+              },
             },
           }));
           setAiStatus("sent");
         };
+
+        // список всех учеников для журнала (по тем, кто уже отметился)
+        const allStudentNames = Object.keys(progress).sort();
 
         return (
           <div className="min-h-screen bg-pink-50 p-4">
@@ -257,12 +254,12 @@
               <div>
                 <h1 className="text-3xl font-bold text-pink-700">A1 AI Bayan</h1>
                 <p className="text-gray-500 text-sm">
-                  Курс грамматики A1–A2 • звёзды, говорение и ИИ
+                  Грамматика A1–A2 • говорение • звёзды • ИИ
                 </p>
               </div>
-              {step !== "pin" && (
+              {step !== "name" && (
                 <button
-                  onClick={resetToPin}
+                  onClick={resetAll}
                   className="text-xs px-3 py-1 rounded-full bg-white border border-pink-200 hover:bg-pink-100"
                 >
                   Выйти
@@ -270,19 +267,41 @@
               )}
             </div>
 
-            {/* PIN вход */}
+            {/* Шаг 1: ввод имени */}
+            {step === "name" && (
+              <div className="max-w-md mx-auto bg-white p-6 rounded-2xl shadow">
+                <h2 className="text-xl font-semibold mb-3 text-pink-700">
+                  Введи имя
+                </h2>
+                <input
+                  className="w-full border px-3 py-2 rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
+                  type="text"
+                  placeholder="Например: L1 или своё имя"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                />
+                <button
+                  onClick={handleNameContinue}
+                  className="w-full mt-2 bg-pink-500 hover:bg-pink-600 text-white py-2 rounded-lg font-medium"
+                >
+                  Продолжить
+                </button>
+              </div>
+            )}
+
+            {/* Шаг 2: ввод PIN */}
             {step === "pin" && (
               <div className="max-w-md mx-auto bg-white p-6 rounded-2xl shadow">
                 <h2 className="text-xl font-semibold mb-3 text-pink-700">
-                  Вход по PIN
+                  Ввод PIN
                 </h2>
                 <p className="text-gray-500 text-sm mb-2">
-                  Ученики: <b>2844</b> • Учитель (журнал): <b>3244</b>
+                  Имя: <b>{studentName}</b>
                 </p>
                 <input
                   className="w-full border px-3 py-2 rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
                   type="password"
-                  placeholder="Введите PIN"
+                  placeholder="PIN"
                   value={pinInput}
                   onChange={(e) => setPinInput(e.target.value)}
                 />
@@ -305,90 +324,80 @@
                   Журнал учителя
                 </h2>
                 <p className="text-gray-600 text-sm mb-4">
-                  Видно, сколько звёзд (правильных ответов и активности) у
-                  каждого ученика.
+                  Видно, сколько звёзд у каждого ученика (правильные ответы).
                 </p>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm border">
-                    <thead>
-                      <tr className="bg-pink-50">
-                        <th className="border px-2 py-1 text-left">Ученик</th>
-                        <th className="border px-2 py-1 text-left">Звёзды</th>
-                        <th className="border px-2 py-1 text-left">Из возможных</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {students.map((s) => {
-                        const count = getStudentStarCount(s);
-                        return (
-                          <tr key={s}>
-                            <td className="border px-2 py-1 font-medium">{s}</td>
-                            <td className="border px-2 py-1">{count}</td>
-                            <td className="border px-2 py-1">
-                              {questionLessonsCount}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                {allStudentNames.length === 0 ? (
+                  <p className="text-gray-500 text-sm">
+                    Пока никто не проходил задания.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border">
+                      <thead>
+                        <tr className="bg-pink-50">
+                          <th className="border px-2 py-1 text-left">Ученик</th>
+                          <th className="border px-2 py-1 text-left">Звёзды</th>
+                          <th className="border px-2 py-1 text-left">Из возможных</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allStudentNames.map((name) => {
+                          const count = getStudentStarCount(name);
+                          return (
+                            <tr key={name}>
+                              <td className="border px-2 py-1 font-medium">
+                                {name}
+                              </td>
+                              <td className="border px-2 py-1">{count}</td>
+                              <td className="border px-2 py-1">
+                                {questionLessonsCount}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* ВЫБОР УЧЕНИКА */}
-            {step === "student" && (
-              <div className="bg-white p-6 rounded-2xl shadow">
-                <h2 className="text-xl font-semibold mb-3 text-pink-700">
-                  Выбор ученика
-                </h2>
-                <p className="text-gray-600 text-sm mb-3">
-                  L1, L2, ... L30 — слоты для имён учеников.
-                </p>
-                <div className="grid grid-cols-4 gap-3">
-                  {students.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => handleSelectStudent(s)}
-                      className="border rounded-xl p-2 hover:bg-pink-50 text-sm bg-white"
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* УРОКИ ДЛЯ УЧЕНИКА */}
+            {/* МЕНЮ УРОКОВ ДЛЯ УЧЕНИКА */}
             {step === "lessons" && (
               <>
                 {section === "home" && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {lessons.map((l) => {
-                      const colors = getLessonColors(l.id);
-                      return (
-                        <div
-                          key={l.id}
-                          onClick={() => {
-                            setSection(l.id);
-                            setQuizAnswer("");
-                            setQuizResult(null);
-                            setAiQuestion("");
-                            setAiStatus(null);
-                          }}
-                          className={`bg-gradient-to-br ${colors.card} p-4 rounded-2xl shadow cursor-pointer hover:shadow-lg flex items-center justify-between`}
-                        >
-                          <div>
-                            <h3 className="font-semibold text-sm md:text-base text-pink-900">
-                              {l.title}
-                            </h3>
+                  <div className="space-y-3">
+                    <div className="mb-2 text-sm text-gray-600">
+                      Ученик: <b>{studentName}</b>
+                    </div>
+
+                    {/* Главное меню: 30 тем */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {lessons.map((l) => {
+                        const colors = getLessonColors(l.id);
+                        const status = getLessonStatus(activeStudentId, l.id);
+                        return (
+                          <div
+                            key={l.id}
+                            onClick={() => openLesson(l.id)}
+                            className={`bg-gradient-to-br ${colors.card} p-4 rounded-2xl shadow cursor-pointer hover:shadow-lg flex items-center justify-between`}
+                          >
+                            <div>
+                              <h3 className="font-semibold text-sm md:text-base text-pink-900">
+                                {l.title}
+                              </h3>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              {status.correct && (
+                                <span className="text-yellow-500 text-xl">
+                                  🌟
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          {studentHasStar(selectedStudent, l.id) && (
-                            <span className="text-yellow-500 text-xl ml-2">★</span>
-                          )}
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -411,8 +420,8 @@
                       <h2 className="text-2xl font-bold text-pink-700">
                         {currentLesson.title}
                       </h2>
-                      {studentHasStar(selectedStudent, currentLesson.id) && (
-                        <span className="text-yellow-500 text-2xl">★</span>
+                      {studentCorrect(activeStudentId, currentLesson.id) && (
+                        <span className="text-yellow-500 text-2xl">🌟</span>
                       )}
                     </div>
 
@@ -420,21 +429,21 @@
                       {currentLesson.content}
                     </p>
 
-                    {/* ЧАТ С ИИ: 1 вопрос по теме */}
+                    {/* ЧАТ С ИИ — 1 вопрос по теме */}
                     <div className="mt-6 p-4 border rounded-xl bg-blue-50 text-sm md:text-base">
                       <p className="font-semibold mb-2">
                         Чат с ИИ Bayan (1 вопрос по теме):
                       </p>
 
-                      {studentAskedAI(selectedStudent, currentLesson.id) ? (
+                      {studentAskedAI(activeStudentId, currentLesson.id) ? (
                         <p className="text-gray-600 text-sm">
-                          Вы уже задали 1 вопрос по этому уроку.
+                          Вопрос по этой теме уже задан.
                         </p>
                       ) : (
                         <>
                           <input
                             className="border px-3 py-2 rounded w-full mb-2"
-                            placeholder="Введите вопрос по теме урока"
+                            placeholder="Напиши вопрос по этой грамматике"
                             value={aiQuestion}
                             onChange={(e) => setAiQuestion(e.target.value)}
                           />
@@ -448,15 +457,14 @@
                       )}
 
                       {aiStatus === "sent" &&
-                        studentAskedAI(selectedStudent, currentLesson.id) && (
+                        studentAskedAI(activeStudentId, currentLesson.id) && (
                           <p className="text-purple-700 font-semibold mt-2">
-                            ИИ получил ваш вопрос! Ответ можно использовать в
-                            чат-боте.
+                            ИИ получил твой вопрос. Ответ можно получить в чат-боте.
                           </p>
                         )}
                     </div>
 
-                    {/* ГОВОРЕНИЕ — индивидуально по теме */}
+                    {/* ГОВОРЕНИЕ — задания по теме (про себя и окружение) */}
                     <div className="mt-6 p-4 border rounded-xl bg-rose-50 text-sm md:text-base">
                       <p className="font-semibold mb-2 text-rose-700">
                         Говорение: задания по теме
@@ -467,14 +475,13 @@
                           case 1:
                             return (
                               <ul className="list-disc ml-5 space-y-1 text-rose-800">
-                                <li>Скажи 5 предложений с «I am…»</li>
+                                <li>Скажи 5 предложений с «I am…» про себя.</li>
                                 <li>
-                                  Скажи 3 предложения с «He is / She is…» про людей
-                                  вокруг.
+                                  Скажи 3 предложения с «He is / She is…» про
+                                  семью или друзей.
                                 </li>
                                 <li>
-                                  Скажи 2 вопроса: «Are you…?» про себя и
-                                  одноклассника.
+                                  Скажи 2 вопроса: «Are you…?» к себе и однокласснику.
                                 </li>
                               </ul>
                             );
@@ -502,12 +509,12 @@
                                   live, I like…).
                                 </li>
                                 <li>
-                                  Скажи 3 предложения о своём друге/подруге
-                                  (He/She likes…).
+                                  Скажи 3 предложения о друге/подруге (He/She
+                                  likes…).
                                 </li>
                                 <li>
                                   Скажи 2 факта о школе или семье (We study…, My
-                                  family …).
+                                  family…).
                                 </li>
                               </ul>
                             );
@@ -531,7 +538,8 @@
                             return (
                               <ul className="list-disc ml-5 space-y-1 text-rose-800">
                                 <li>
-                                  Скажи 5 предложений с «I have…» про свои вещи.
+                                  Скажи 5 предложений с «I have…» про свои вещи и
+                                  семью.
                                 </li>
                                 <li>
                                   Задай 3 вопроса: «Do you have…?» воображаемому
@@ -548,11 +556,11 @@
                               <ul className="list-disc ml-5 space-y-1 text-rose-800">
                                 <li>
                                   Опиши свою комнату: 3 предложения с «There
-                                  is…»
+                                  is…».
                                 </li>
                                 <li>
-                                  Опиши школу/класс: 3 предложения с «There
-                                  are…»
+                                  Опиши класс/школу: 3 предложения с «There
+                                  are…».
                                 </li>
                                 <li>
                                   Задай 2 вопроса: «Is there…?» / «Are there…?» про
@@ -564,8 +572,8 @@
                             return (
                               <ul className="list-disc ml-5 space-y-1 text-rose-800">
                                 <li>
-                                  Скажи 2 предложения о себе, используя грамматику
-                                  урока.
+                                  Скажи 2 предложения о себе, используя
+                                  грамматику урока.
                                 </li>
                                 <li>
                                   Скажи 2 предложения об окружающих (семья,
@@ -581,12 +589,11 @@
                       })()}
 
                       <p className="text-xs text-rose-500 mt-2">
-                        Говори вслух — это помогает связать грамматику с реальной
-                        жизнью.
+                        Говори вслух — так грамматика становится твоей.
                       </p>
                     </div>
 
-                    {/* ПРОВЕРОЧНОЕ ЗАДАНИЕ */}
+                    {/* ПРОВЕРОЧНОЕ ЗАДАНИЕ (только если есть question) */}
                     {currentLesson.question && (
                       <div className="mt-4 p-4 border rounded-xl bg-gray-50 text-sm md:text-base">
                         <p className="font-semibold mb-2">
@@ -599,37 +606,32 @@
                           value={quizAnswer}
                           onChange={(e) => setQuizAnswer(e.target.value)}
                           placeholder="Ответ"
-                          disabled={studentHasStar(
-                            selectedStudent,
-                            currentLesson.id
-                          )}
+                          disabled={studentTried(activeStudentId, currentLesson.id)}
                         />
 
                         <button
-                          onClick={checkAnswer}
+                          onClick={handleCheckAnswer}
                           className="bg-green-500 w-full text-white py-2 rounded disabled:bg-gray-300"
-                          disabled={studentHasStar(
-                            selectedStudent,
-                            currentLesson.id
-                          )}
+                          disabled={studentTried(activeStudentId, currentLesson.id)}
                         >
                           Проверить
                         </button>
 
                         {quizResult === true && (
-                          <p className="text-green-600 font-semibold mt-2">
-                            ✔ Правильно! Звезда начислена.
-                          </p>
+                          <div className="flex items-center space-x-2 mt-2 text-green-600 font-semibold">
+                            <span className="text-yellow-500 text-xl">🌟</span>
+                            <span>✔ Правильно!</span>
+                          </div>
                         )}
                         {quizResult === false && (
-                          <p className="text-red-600 font-semibold mt-2">
-                            ✖ Неправильно. Попробуй в следующий раз.
-                          </p>
+                          <div className="flex items-center space-x-2 mt-2 text-red-600 font-semibold">
+                            <span className="text-xl">✖</span>
+                            <span>Неправильно.</span>
+                          </div>
                         )}
-                        {studentHasStar(selectedStudent, currentLesson.id) && (
+                        {studentTried(activeStudentId, currentLesson.id) && (
                           <p className="text-gray-500 text-xs mt-1">
-                            Этот урок уже отмечен звездой. Ответ можно дать только
-                            один раз.
+                            Ответ можно дать только один раз.
                           </p>
                         )}
                       </div>
