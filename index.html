@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>A1 AI Bayan</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- TailwindCSS через CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- React 18 + ReactDOM через CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+    <!-- Babel для поддержки JSX в браузере -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  </head>
+  <body class="bg-pink-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+
+      // A1 AI Bayan — курс A1–A2 с 24 темами
+      // Фишки:
+      // - 2 PIN-кода: ученик (2844) и учитель (3244)
+      // - 30 слотов учеников: L1..L30
+      // - Звёзды за правильные ответы (1 попытка)
+      // - Журнал учителя с прогрессом
+      // - Чат с ИИ Bayan (1 вопрос по теме на урок)
+      // - Говорение: задания по теме, про себя и окружение
+      // - Розовая тема + свой цвет у каждой темы
+
+      function App() {
+        const [step, setStep] = useState("pin"); // "pin" | "student" | "teacher" | "lessons"
+        const [pinInput, setPinInput] = useState("");
+        const [pinError, setPinError] = useState("");
+
+        const [selectedStudent, setSelectedStudent] = useState(null); // "L1"..."L30"
+        const [section, setSection] = useState("home"); // "home" | lessonId
+
+        // stars[studentId] = { 1: true, 2: true, q1: true ... }
+        const [stars, setStars] = useState({});
+
+        // тест по грамматике
+        const [quizAnswer, setQuizAnswer] = useState("");
+        const [quizResult, setQuizResult] = useState(null); // true | false | null
+
+        // вопрос к ИИ по теме
+        const [aiQuestion, setAiQuestion] = useState("");
+        const [aiStatus, setAiStatus] = useState(null); // null | "sent"
+
+        const STUDENT_PIN = "2844";
+        const TEACHER_PIN = "3244";
+
+        // 24 урока, первые 6 с тестовым вопросом
+        const lessons = [
+          {
+            id: 1,
+            title: "Day 1 — To be (am/is/are)",
+            content:
+              "I am / You are / He is...\n\nЦель: научиться говорить, кто ты, кто он/она и т.д.",
+            question: "He ___ a student",
+            correct: "is",
+          },
+          {
+            id: 2,
+            title: "Day 2 — This / That / These / Those",
+            content:
+              "This is / That is / These are / Those are\n\nЦель: указывать на предметы рядом и далеко.",
+            question: "___ is my book (рядом)",
+            correct: "This",
+          },
+          {
+            id: 3,
+            title: "Day 3 — Present Simple",
+            content:
+              "I live / She likes / We study...\n\nЦель: говорить о фактах и привычках.",
+            question: "She ___ coffee",
+            correct: "likes",
+          },
+          {
+            id: 4,
+            title: "Day 4 — Do/Does",
+            content:
+              "Do you...? Does he...? Does she...?\n\nЦель: задавать вопросы в Present Simple.",
+            question: "___ you like English?",
+            correct: "Do",
+          },
+          {
+            id: 5,
+            title: "Day 5 — Have / Have got",
+            content:
+              "I have... / I have got...\n\nЦель: говорить о том, что у тебя есть.",
+            question: "I ___ a book",
+            correct: "have",
+          },
+          {
+            id: 6,
+            title: "Day 6 — There is / There are",
+            content:
+              "There is a... / There are...\n\nЦель: описывать пространство (комнаты, классы, города).",
+            question: "There ___ a cat",
+            correct: "is",
+          },
+          // Остальные темы можно будет заполнить позже
+          ...Array.from({ length: 18 }, (_, i) => ({
+            id: i + 7,
+            title: `Day ${i + 7}`,
+            content: `Содержимое урока ${i + 7} (можно дополнить позже).`,
+            question: null,
+            correct: null,
+          })),
+        ];
+
+        const students = Array.from({ length: 30 }, (_, i) => `L${i + 1}`);
+
+        const questionLessonsCount = lessons.filter((l) => l.question).length;
+
+        // Цвета карточек тем — по кругу
+        const colorSets = [
+          { card: "from-pink-100 to-pink-200" },
+          { card: "from-rose-100 to-rose-200" },
+          { card: "from-purple-100 to-purple-200" },
+          { card: "from-blue-100 to-blue-200" },
+          { card: "from-emerald-100 to-emerald-200" },
+          { card: "from-amber-100 to-amber-200" },
+        ];
+
+        const getLessonColors = (id) => {
+          const idx = (id - 1) % colorSets.length;
+          return colorSets[idx];
+        };
+
+        // загрузка прогресса из localStorage
+        useEffect(() => {
+          const saved = localStorage.getItem("a1_ai_bayan_stars");
+          if (saved) {
+            try {
+              setStars(JSON.parse(saved));
+            } catch {
+              setStars({});
+            }
+          }
+        }, []);
+
+        // сохранение прогресса
+        useEffect(() => {
+          localStorage.setItem("a1_ai_bayan_stars", JSON.stringify(stars));
+        }, [stars]);
+
+        const handleCheckPin = () => {
+          if (pinInput === STUDENT_PIN) {
+            setStep("student");
+            setPinError("");
+            setSelectedStudent(null);
+            setSection("home");
+          } else if (pinInput === TEACHER_PIN) {
+            setStep("teacher");
+            setPinError("");
+            setSelectedStudent(null);
+            setSection("home");
+          } else {
+            setPinError("Неверный PIN");
+          }
+        };
+
+        const handleSelectStudent = (s) => {
+          setSelectedStudent(s);
+          setStep("lessons");
+          setSection("home");
+          setQuizAnswer("");
+          setQuizResult(null);
+          setAiQuestion("");
+          setAiStatus(null);
+        };
+
+        const resetToPin = () => {
+          setStep("pin");
+          setPinInput("");
+          setPinError("");
+          setSelectedStudent(null);
+          setSection("home");
+          setQuizAnswer("");
+          setQuizResult(null);
+          setAiQuestion("");
+          setAiStatus(null);
+        };
+
+        const currentLesson =
+          typeof section === "number"
+            ? lessons.find((l) => l.id === section)
+            : null;
+
+        const studentHasStar = (studentId, lessonId) => {
+          if (!studentId) return false;
+          return !!(stars?.[studentId]?.[lessonId]);
+        };
+
+        const studentAskedAI = (studentId, lessonId) => {
+          if (!studentId) return false;
+          return !!(stars?.[studentId]?.[`q${lessonId}`]);
+        };
+
+        const getStudentStarCount = (studentId) => {
+          const data = stars?.[studentId] || {};
+          return Object.keys(data).length;
+        };
+
+        const checkAnswer = () => {
+          if (!currentLesson || !currentLesson.correct || !selectedStudent) return;
+
+          // уже есть звезда — не даём ещё раз
+          if (studentHasStar(selectedStudent, currentLesson.id)) {
+            setQuizResult(true);
+            return;
+          }
+
+          if (
+            quizAnswer.trim().toLowerCase() ===
+            currentLesson.correct.toLowerCase()
+          ) {
+            setQuizResult(true);
+            setStars((prev) => ({
+              ...prev,
+              [selectedStudent]: {
+                ...(prev[selectedStudent] || {}),
+                [currentLesson.id]: true,
+              },
+            }));
+          } else {
+            setQuizResult(false);
+          }
+        };
+
+        const handleAskAI = () => {
+          if (!selectedStudent || !currentLesson) return;
+          if (!aiQuestion.trim()) return;
+
+          // Если уже задавал вопрос по этому уроку — нельзя ещё
+          if (studentAskedAI(selectedStudent, currentLesson.id)) return;
+
+          setStars((prev) => ({
+            ...prev,
+            [selectedStudent]: {
+              ...(prev[selectedStudent] || {}),
+              [`q${currentLesson.id}`]: true,
+            },
+          }));
+          setAiStatus("sent");
+        };
+
+        return (
+          <div className="min-h-screen bg-pink-50 p-4">
+            {/* Шапка */}
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h1 className="text-3xl font-bold text-pink-700">A1 AI Bayan</h1>
+                <p className="text-gray-500 text-sm">
+                  Курс грамматики A1–A2 • звёзды, говорение и ИИ
+                </p>
+              </div>
+              {step !== "pin" && (
+                <button
+                  onClick={resetToPin}
+                  className="text-xs px-3 py-1 rounded-full bg-white border border-pink-200 hover:bg-pink-100"
+                >
+                  Выйти
+                </button>
+              )}
+            </div>
+
+            {/* PIN вход */}
+            {step === "pin" && (
+              <div className="max-w-md mx-auto bg-white p-6 rounded-2xl shadow">
+                <h2 className="text-xl font-semibold mb-3 text-pink-700">
+                  Вход по PIN
+                </h2>
+                <p className="text-gray-500 text-sm mb-2">
+                  Ученики: <b>2844</b> • Учитель (журнал): <b>3244</b>
+                </p>
+                <input
+                  className="w-full border px-3 py-2 rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-300"
+                  type="password"
+                  placeholder="Введите PIN"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                />
+                {pinError && (
+                  <p className="text-red-500 text-sm mb-1">{pinError}</p>
+                )}
+                <button
+                  onClick={handleCheckPin}
+                  className="w-full mt-2 bg-pink-500 hover:bg-pink-600 text-white py-2 rounded-lg font-medium"
+                >
+                  Войти
+                </button>
+              </div>
+            )}
+
+            {/* ЖУРНАЛ УЧИТЕЛЯ */}
+            {step === "teacher" && (
+              <div className="bg-white p-6 rounded-2xl shadow">
+                <h2 className="text-xl font-semibold mb-3 text-pink-700">
+                  Журнал учителя
+                </h2>
+                <p className="text-gray-600 text-sm mb-4">
+                  Видно, сколько звёзд (правильных ответов и активности) у
+                  каждого ученика.
+                </p>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm border">
+                    <thead>
+                      <tr className="bg-pink-50">
+                        <th className="border px-2 py-1 text-left">Ученик</th>
+                        <th className="border px-2 py-1 text-left">Звёзды</th>
+                        <th className="border px-2 py-1 text-left">Из возможных</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {students.map((s) => {
+                        const count = getStudentStarCount(s);
+                        return (
+                          <tr key={s}>
+                            <td className="border px-2 py-1 font-medium">{s}</td>
+                            <td className="border px-2 py-1">{count}</td>
+                            <td className="border px-2 py-1">
+                              {questionLessonsCount}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ВЫБОР УЧЕНИКА */}
+            {step === "student" && (
+              <div className="bg-white p-6 rounded-2xl shadow">
+                <h2 className="text-xl font-semibold mb-3 text-pink-700">
+                  Выбор ученика
+                </h2>
+                <p className="text-gray-600 text-sm mb-3">
+                  L1, L2, ... L30 — слоты для имён учеников.
+                </p>
+                <div className="grid grid-cols-4 gap-3">
+                  {students.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => handleSelectStudent(s)}
+                      className="border rounded-xl p-2 hover:bg-pink-50 text-sm bg-white"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* УРОКИ ДЛЯ УЧЕНИКА */}
+            {step === "lessons" && (
+              <>
+                {section === "home" && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {lessons.map((l) => {
+                      const colors = getLessonColors(l.id);
+                      return (
+                        <div
+                          key={l.id}
+                          onClick={() => {
+                            setSection(l.id);
+                            setQuizAnswer("");
+                            setQuizResult(null);
+                            setAiQuestion("");
+                            setAiStatus(null);
+                          }}
+                          className={`bg-gradient-to-br ${colors.card} p-4 rounded-2xl shadow cursor-pointer hover:shadow-lg flex items-center justify-between`}
+                        >
+                          <div>
+                            <h3 className="font-semibold text-sm md:text-base text-pink-900">
+                              {l.title}
+                            </h3>
+                          </div>
+                          {studentHasStar(selectedStudent, l.id) && (
+                            <span className="text-yellow-500 text-xl ml-2">★</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {section !== "home" && currentLesson && (
+                  <div className="bg-white p-6 rounded-2xl shadow max-w-2xl mx-auto">
+                    <button
+                      onClick={() => {
+                        setSection("home");
+                        setQuizAnswer("");
+                        setQuizResult(null);
+                        setAiQuestion("");
+                        setAiStatus(null);
+                      }}
+                      className="mb-3 bg-pink-500 text-white px-4 py-2 rounded-full text-sm"
+                    >
+                      ← Ко всем урокам
+                    </button>
+
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-2xl font-bold text-pink-700">
+                        {currentLesson.title}
+                      </h2>
+                      {studentHasStar(selectedStudent, currentLesson.id) && (
+                        <span className="text-yellow-500 text-2xl">★</span>
+                      )}
+                    </div>
+
+                    <p className="mb-4 whitespace-pre-line text-sm md:text-base">
+                      {currentLesson.content}
+                    </p>
+
+                    {/* ЧАТ С ИИ: 1 вопрос по теме */}
+                    <div className="mt-6 p-4 border rounded-xl bg-blue-50 text-sm md:text-base">
+                      <p className="font-semibold mb-2">
+                        Чат с ИИ Bayan (1 вопрос по теме):
+                      </p>
+
+                      {studentAskedAI(selectedStudent, currentLesson.id) ? (
+                        <p className="text-gray-600 text-sm">
+                          Вы уже задали 1 вопрос по этому уроку.
+                        </p>
+                      ) : (
+                        <>
+                          <input
+                            className="border px-3 py-2 rounded w-full mb-2"
+                            placeholder="Введите вопрос по теме урока"
+                            value={aiQuestion}
+                            onChange={(e) => setAiQuestion(e.target.value)}
+                          />
+                          <button
+                            onClick={handleAskAI}
+                            className="bg-purple-500 w-full text-white py-2 rounded"
+                          >
+                            Спросить ИИ
+                          </button>
+                        </>
+                      )}
+
+                      {aiStatus === "sent" &&
+                        studentAskedAI(selectedStudent, currentLesson.id) && (
+                          <p className="text-purple-700 font-semibold mt-2">
+                            ИИ получил ваш вопрос! Ответ можно использовать в
+                            чат-боте.
+                          </p>
+                        )}
+                    </div>
+
+                    {/* ГОВОРЕНИЕ — индивидуально по теме */}
+                    <div className="mt-6 p-4 border rounded-xl bg-rose-50 text-sm md:text-base">
+                      <p className="font-semibold mb-2 text-rose-700">
+                        Говорение: задания по теме
+                      </p>
+
+                      {(() => {
+                        switch (currentLesson.id) {
+                          case 1:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>Скажи 5 предложений с «I am…»</li>
+                                <li>
+                                  Скажи 3 предложения с «He is / She is…» про людей
+                                  вокруг.
+                                </li>
+                                <li>
+                                  Скажи 2 вопроса: «Are you…?» про себя и
+                                  одноклассника.
+                                </li>
+                              </ul>
+                            );
+                          case 2:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Скажи 4 предложения с «This is…» про вещи рядом.
+                                </li>
+                                <li>
+                                  Скажи 3 предложения с «Those are…» про вещи
+                                  подальше.
+                                </li>
+                                <li>
+                                  Опиши 3 предмета вокруг, используя
+                                  this/that/these/those.
+                                </li>
+                              </ul>
+                            );
+                          case 3:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Скажи 5 предложений о себе в Present Simple (I
+                                  live, I like…).
+                                </li>
+                                <li>
+                                  Скажи 3 предложения о своём друге/подруге
+                                  (He/She likes…).
+                                </li>
+                                <li>
+                                  Скажи 2 факта о школе или семье (We study…, My
+                                  family …).
+                                </li>
+                              </ul>
+                            );
+                          case 4:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Задай 3 вопроса с «Do you…?» про хобби и учёбу.
+                                </li>
+                                <li>
+                                  Задай 2 вопроса с «Does he / Does she…?» про
+                                  знакомых.
+                                </li>
+                                <li>
+                                  Скажи 2 отрицания: «I don’t… / He doesn’t…» про
+                                  себя и друга.
+                                </li>
+                              </ul>
+                            );
+                          case 5:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Скажи 5 предложений с «I have…» про свои вещи.
+                                </li>
+                                <li>
+                                  Задай 3 вопроса: «Do you have…?» воображаемому
+                                  однокласснику.
+                                </li>
+                                <li>
+                                  Скажи 2 отрицания с «don’t have» про то, чего у
+                                  тебя нет.
+                                </li>
+                              </ul>
+                            );
+                          case 6:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Опиши свою комнату: 3 предложения с «There
+                                  is…»
+                                </li>
+                                <li>
+                                  Опиши школу/класс: 3 предложения с «There
+                                  are…»
+                                </li>
+                                <li>
+                                  Задай 2 вопроса: «Is there…?» / «Are there…?» про
+                                  своё окружение.
+                                </li>
+                              </ul>
+                            );
+                          default:
+                            return (
+                              <ul className="list-disc ml-5 space-y-1 text-rose-800">
+                                <li>
+                                  Скажи 2 предложения о себе, используя грамматику
+                                  урока.
+                                </li>
+                                <li>
+                                  Скажи 2 предложения об окружающих (семья,
+                                  друзья, класс).
+                                </li>
+                                <li>
+                                  Скажи 1 длинное личное предложение, применяя
+                                  правило урока.
+                                </li>
+                              </ul>
+                            );
+                        }
+                      })()}
+
+                      <p className="text-xs text-rose-500 mt-2">
+                        Говори вслух — это помогает связать грамматику с реальной
+                        жизнью.
+                      </p>
+                    </div>
+
+                    {/* ПРОВЕРОЧНОЕ ЗАДАНИЕ */}
+                    {currentLesson.question && (
+                      <div className="mt-4 p-4 border rounded-xl bg-gray-50 text-sm md:text-base">
+                        <p className="font-semibold mb-2">
+                          Проверка по грамматике:
+                        </p>
+                        <p className="mb-3">{currentLesson.question}</p>
+
+                        <input
+                          className="border px-3 py-2 rounded w-full mb-2"
+                          value={quizAnswer}
+                          onChange={(e) => setQuizAnswer(e.target.value)}
+                          placeholder="Ответ"
+                          disabled={studentHasStar(
+                            selectedStudent,
+                            currentLesson.id
+                          )}
+                        />
+
+                        <button
+                          onClick={checkAnswer}
+                          className="bg-green-500 w-full text-white py-2 rounded disabled:bg-gray-300"
+                          disabled={studentHasStar(
+                            selectedStudent,
+                            currentLesson.id
+                          )}
+                        >
+                          Проверить
+                        </button>
+
+                        {quizResult === true && (
+                          <p className="text-green-600 font-semibold mt-2">
+                            ✔ Правильно! Звезда начислена.
+                          </p>
+                        )}
+                        {quizResult === false && (
+                          <p className="text-red-600 font-semibold mt-2">
+                            ✖ Неправильно. Попробуй в следующий раз.
+                          </p>
+                        )}
+                        {studentHasStar(selectedStudent, currentLesson.id) && (
+                          <p className="text-gray-500 text-xs mt-1">
+                            Этот урок уже отмечен звездой. Ответ можно дать только
+                            один раз.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
